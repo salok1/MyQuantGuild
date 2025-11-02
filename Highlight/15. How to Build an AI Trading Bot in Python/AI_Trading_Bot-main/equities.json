@@ -1,0 +1,1 @@
+{"AAPL": {"position": 0, "entry_price": 270.41, "levels": {"1": 256.89, "2": 243.37, "3": 229.85, "4": 216.33, "5": 202.81}, "drawdown": 0.05, "status": "Off"}, "JNJ": {"position": 0, "entry_price": 188.89, "levels": {"1": 179.45, "2": 170.0, "3": 160.56, "4": 151.11, "5": 141.67}, "drawdown": 0.05, "status": "Off"}}
