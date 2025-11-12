@@ -1,0 +1,85 @@
+# Heston Parameter Neural Network
+
+This folder contains a reproducible pipeline for estimating Heston model parameters from plain-vanilla option quotes. Each module favors readability over micro-optimisation and keeps gradients in `torch.float64` so the entire calibration loop supports autograd.
+
+---
+
+## 📦 What’s Inside
+
+| File | Purpose |
+| --- | --- |
+| `io_csv.py` | Validated CSV reader for columns `S0, K, C_mkt, T`. |
+| `bs_iv.py` | Black–Scholes pricer and a transparent bisection implied-vol solver. |
+| `dataset.py` | Feature engineering (`[S0/K, T, σ_BS]`), tensor packaging, and train/val split. |
+| `heston_torch.py` | Heston parameter dataclass, Little Heston Trap CF, Carr–Madan FFT pricer. |
+| `model.py` | 3→64→64→5 MLP producing unconstrained logits and Carr–Madan wrapper. |
+| `train.py` | End-to-end training loop with AdamW, validation logging, optional checkpointing. |
+| `tests/test_minimal.py` | Regression checks for CF normalisation, BS+IV inversion, gradient flow. |
+
+---
+
+## ⚙️ Requirements
+
+- Python 3.9+
+- `torch`, `pandas`, `numpy`
+
+Optional (recommended): `pytest` for running the smoke tests.
+
+Install your dependencies via pip or conda, for example:
+
+```bash
+pip install torch pandas numpy pytest
+```
+
+---
+
+## 🚀 Usage
+
+1. **Prepare data**  
+   Place a CSV with headers `S0,K,C_mkt,T` in this directory (e.g. `options_sample_200.csv`).
+
+2. **Train the network**
+
+   ```bash
+   python train.py \
+       --csv options_sample_200.csv \
+       --r 0.02 \
+       --epochs 50 \
+       --lr 1e-3 \
+       --alpha 1.5 \
+       --nfft 4096 \
+       --eta 0.25
+   ```
+
+   What happens each epoch:
+   - Implicit features `[S0/K, T, σ_BS]` feed the MLP.
+   - Network outputs are mapped to physical Heston params via softplus/tanh transforms.
+   - Carr–Madan FFT (Little Heston Trap) prices each option analytically.
+   - RMSE versus market prices is reported alongside a 5-row validation table.
+
+3. **Optional checkpoint**
+
+   Add `--save-path heston_net.pt` to persist model weights.
+
+---
+
+## ✅ Tests
+
+Run the unit tests (requires `pytest`):
+
+```bash
+python -m pytest -q
+```
+
+The suite verifies that:
+- The Heston characteristic function satisfies φ(0)=1.
+- Black–Scholes pricing and the implied-vol solver invert each other.
+- The neural network forward/backward pass yields non-zero gradients.
+
+---
+
+## 📝 Notes
+
+- All computations occur in `torch.float64` for improved numerical stability.
+- The Carr–Madan implementation uses Simpson weights and log-strike interpolation to stay both accurate and readable.
+- Implied volatilities are computed per quote using the built-in bisection solver; no external APIs are needed.
