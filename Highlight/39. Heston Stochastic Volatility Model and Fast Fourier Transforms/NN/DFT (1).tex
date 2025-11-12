@@ -1,0 +1,693 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------- Encodage / fontes ----------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+
+% ---------- Maths / mise en page ----------
+\usepackage{amsmath,amssymb,amsfonts,mathtools,bm}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{microtype} % microtypographie
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+\numberwithin{equation}{section}
+\allowdisplaybreaks
+\raggedbottom % éviter les grands espaces verticaux
+
+% ---------- Typo / structure pédagogique ----------
+\usepackage{titlesec}
+\usepackage[most]{tcolorbox}
+\usepackage{enumitem}
+
+% Titres plus visibles
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.6em}{}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+
+% Espacement lisible
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+% Listes compactes et alignées
+\setlist[itemize]{left=0pt,itemsep=0.2em,topsep=0.2em}
+\setlist[enumerate]{left=0pt,itemsep=0.2em,topsep=0.2em}
+
+% ---------- Boîtes pédagogiques ----------
+\tcbset{
+  colback=gray!3,
+  colframe=black!40,
+  boxrule=0.5pt,
+  arc=1.5mm,
+  left=6pt,right=6pt,top=6pt,bottom=6pt
+}
+\newtcolorbox{idee}[1][]{title=Idée clé,#1}
+\newtcolorbox{enjeu}[1][]{title=Enjeu numérique,#1}
+\newtcolorbox{pratique}[1][]{title=Conseil pratique,#1}
+\newtcolorbox{rappel}[1][]{title=Rappel,#1}
+
+% ---------- Macros ----------
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\CF}{\varphi} % characteristic function
+\newcommand{\FT}{\psi}     % Fourier transform of damped call
+\newcommand{\Log}{\ln}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\Szero}{S_0}
+
+\title{Carr--Madan et Heston : d\'eveloppements complets et coh\'erents}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% =========================================================
+\section{Partie I --- Méthode de Carr--Madan pour le pricing de Heston via la FFT}
+% =========================================================
+
+\subsection{1. Objectif et amortissement}
+
+\begin{idee}
+Passer dans le domaine de Fourier simplifie l'intégrale de prix en un produit en fréquence. Il faut d'abord \emph{rendre intégrable} la fonction de prix en log-strike au moyen d'un amortissement exponentiel.
+\end{idee}
+
+Sous la mesure risque-neutre,
+\[
+C(K,T) = e^{-rT}\,\E^\Q\!\big[(S_T-K)^+\big],\qquad k=\ln K.
+\]
+Le passage au domaine de Fourier en variable $k$ est naturel pour transformer l'intégrale de prix en un produit dans l'espace des fréquences.
+Cependant, $C(\cdot,T)$ n'est pas assez décroissante pour garantir l'intégrabilité $L^1$/$L^2$. 
+On introduit donc afin d'imposer une décroissance exponentielle :
+\[
+c_\alpha(k)\equiv e^{\alpha k} C(e^k,T),\qquad \alpha>0,
+\]
+La valeur de $\alpha$ stabilise le conditionnement num\'erique de la transform\'ee et réduit l'aliasing spectral.
+
+\begin{pratique}
+Valeurs usuelles : $\alpha\in[1,2]$. Trop petit $\Rightarrow$ oscillations et fuite d'énergie ; trop grand $\Rightarrow$ amplification des erreurs d'arrondi en strikes profonds.
+\end{pratique}
+
+\subsection{2. Transformée de Fourier du call amorti}
+
+\begin{rappel}
+On travaille avec la transformée en $k$ du prix amorti $c_\alpha(k)$.
+\end{rappel}
+
+On définit la transformée
+\[
+\hat{c}_\alpha(v)\equiv \FT_T(v)=\int_{-\infty}^{\infty} e^{ivk}\,c_\alpha(k)\,\dd k.
+\]
+En intégrant le payoff amorti et en inversant l'ordre d'intégration (hypothèse $\E[e^{(\alpha+1)Y}]<\infty$), Carr--Madan obtiennent :
+\begin{equation}\label{eq:CM-main}
+\hat{c}_\alpha(v)=\frac{e^{-rT}\,\phi_T\!\big(v-i(\alpha+1)\big)}{\alpha^2+\alpha - v^2 + i(2\alpha+1)v},
+\end{equation}
+où $\phi_T(u)=\E^\Q[e^{iu\ln S_T}]$. Forme équivalente :
+\begin{equation}\label{eq:psi-final-CM}
+\boxed{\;
+\psi_T(\nu)=
+\frac{e^{-rT}}{(\alpha+i\nu)(\alpha+i\nu+1)}\,
+\phi_T\!\big(\nu-i(\alpha+1)\big)\, .
+\;}
+\end{equation}
+
+\paragraph{Justification Partie II.}
+Voir la démonstration détaillée et les conditions d'échange d'intégrales.
+
+\subsection{3. Fonction caractéristique de Heston}
+
+\begin{idee}
+La méthode Carr--Madan ne dépend que de la fonction caractéristique de $\ln S_T$. Pour Heston, elle est explicite, ce qui permet une FFT efficace.
+\end{idee}
+
+Sous Heston (forme \emph{Little Trap}, taux de div. $q$),
+
+For \(s=\ln S_0\) and \(v_0=v_t\):
+\[
+\boxed{\
+\phi_T(u)=\exp\!\Big(
+iu(s+rT)
++\frac{v_0}{\sigma^2}(b-d)\frac{1-e^{-dT}}{1-ge^{-dT}}
++\frac{\kappa\theta}{\sigma^2}\Big[(b-d)T-2\ln\!\frac{1-ge^{-dT}}{1-g}\Big]
+\Big),\
+}
+\]
+with:
+\[
+b=\kappa-\rho\sigma iu,\qquad
+d=\sqrt{\,b^2+\sigma^2(u^2+iu)\,},\qquad
+g=\frac{b-d}{b+d}.
+\]
+
+Justification Partie III.
+
+\subsection{4. Discrétisation pour la FFT}
+
+\begin{idee}
+On échantillonne uniformément en fréquence et en log-strike, avec le lien de Nyquist. Le choix de la maille est crucial pour la précision.
+\end{idee}
+
+On adopte des grilles uniformes :
+\[
+v_j=j\,\Delta v,\quad j=0,\dots,N-1,\qquad
+k_m=k_{\min}+(m-1)\,\Delta k,\quad m=1,\dots,N,
+\]
+avec la contrainte
+\[
+\Delta k\,\Delta v = \frac{2\pi}{N}.
+\]
+Le paramètre $b=\pi/\Delta v$ règle l'étendue $[k_{\min},k_{\min}+N\Delta k]$ des log-strikes. Choisir $b$ pour couvrir la plage de strikes d’intérêt autour de $\ln S_0$.
+
+\begin{enjeu}
+$N$ et $\Delta v$ contrôlent le compromis plage de strikes / résolution. Trop de points sans contrôle de troncature peut dégrader la précision via l'aliasing.
+\end{enjeu}
+
+\paragraph{Ordres de grandeur.}
+$N\in\{2^{10},2^{12},2^{14}\}$ ; $\Delta v$ petit $\Rightarrow$ large domaine en $k$ mais pas trop petit pour éviter des artefacts de troncature.
+
+\subsection{5. Inversion numérique}
+
+\begin{rappel}
+On reconstruit d'abord le \emph{prix amorti} $c_\alpha(k)$ par transformée inverse, puis on \emph{désamortit} pour revenir à $C(K)$.
+\end{rappel}
+
+Formule inverse continue :
+\[
+c_\alpha(k)=\frac{1}{2\pi}\int_{-\infty}^{\infty} e^{-ivk}\,\hat{c}_\alpha(v)\,\dd v
+=\frac{1}{\pi}\int_{0}^{\infty}\Re\!\big(e^{-ivk}\hat{c}_\alpha(v)\big)\,\dd v.
+\]
+Discrétisation FFT :
+\begin{equation}\label{eq:ifft}
+c_\alpha(k_m)\;\approx\;\frac{1}{\pi}\sum_{j=0}^{N-1}\Re\!\big(e^{-iv_j k_m}\,\hat{c}_\alpha(v_j)\big)\,\Delta v\;w_j,
+\end{equation}
+où $w_j$ sont des poids (Simpson conseillé pour réduire l'erreur d'intégration).
+
+\paragraph{Poids de Simpson.}
+\[
+w_j=
+\begin{cases}
+1/3, & j=0,\\
+4/3, & j \text{ impair},\\
+2/3, & j \text{ pair},\\
+\end{cases}
+\quad\text{et } w_{N-1}=1/3 \text{ si } N-1 \text{ pair.}
+\]
+
+\paragraph{Implémentation FFT.}
+Construire le vecteur $\hat{u}_j=\hat{c}_\alpha(v_j)\,e^{-iv_j k_{\min}}\;w_j$, puis appliquer une FFT inverse adaptée à la convention choisie. Le facteur d’échelle $(\Delta v/\pi)$ doit être appliqué après la FFT.
+
+\subsection{6. Désamortissement et récupération des prix}
+
+\[
+C(K_m)=e^{-\alpha k_m}\,c_\alpha(k_m),\qquad K_m=e^{k_m}.
+\]
+L’interpolation (linéaire en $k$ ou spline monotone) fournit $C(K)$ aux strikes requis.
+
+\subsection{7. Conseils numériques}
+
+\begin{pratique}
+\begin{itemize}
+\item \textbf{Stabilité} : $\alpha\simeq1.5$ robuste ; tester la sensibilité à $\alpha$.
+\item \textbf{Troncature} : régler $b$ pour couvrir ATM et OTM pertinents ; ni trop petit, ni inutilement grand.
+\item \textbf{Aliasing} : Simpson réduit l’erreur d’intégration ; un léger filtre en haute fréquence peut aider.
+\item \textbf{Validation} : cas limites vs Black--Scholes ; symétries en moneyness utiles pour contrôler l’erreur.
+\end{itemize}
+\end{pratique}
+
+\newpage
+
+% =========================================================
+\section{Partie II --- Transform\'ee de Fourier du call amorti (Carr--Madan)}
+% =========================================================
+
+\begin{idee}
+Cette section détaille le fil logique : réécriture du payoff, introduction d'une indicatrice, permutation des intégrales, intégration en $k$, et identification avec une c.f. décalée.
+\end{idee}
+
+\begin{equation}\label{eq:psi-final-CM}
+\boxed{\;
+\psi_T(\nu)=
+\frac{e^{-rT}}{(\alpha+i\nu)(\alpha+i\nu+1)}\,
+\CF_T\!\big(\nu-i(\alpha+1)\big)\,
+S_0^{\,i\nu+\alpha+1}
+\;}
+\end{equation}
+
+\subsection{Cadre et notations}
+
+Sous la mesure risque--neutre $\Q$ et un taux $r$ constant :
+\begin{equation}\label{eq:price-start}
+C(K,T) = e^{-rT}\,\E^\Q\!\left[(S_T-K)^+\right].
+\end{equation}
+
+On introduit :
+\begin{equation}
+Y \equiv \Log S_T, \qquad k \equiv \Log K, \qquad f_Y \text{ densit\'e de } Y .
+\end{equation}
+
+La fonction caract\'eristique de $Y$ est :
+\begin{equation}\label{eq:phiY-def}
+\CF_Y(u) = \E\!\left[e^{iuY}\right] = \int_{\R} e^{iuy}\, f_Y(y)\,\dd y .
+\end{equation}
+
+On d\'ecompose $Y$ en :
+\begin{equation}\label{eq:Y-decomp}
+Y = \Log \Szero + X_T , \qquad X_T \equiv \Log\!\left(\frac{S_T}{\Szero}\right) ,
+\end{equation}
+et on d\'efinit la c.f.\ du rendement relatif :
+\begin{equation}\label{eq:phiT-def}
+\CF_T(u) = \E\!\left[e^{iuX_T}\right] .
+\end{equation}
+
+De \eqref{eq:Y-decomp} il vient :
+\begin{equation}\label{eq:phiY-phiT-link}
+\CF_Y(u) = \Szero^{\,iu}\,\CF_T(u) .
+\end{equation}
+
+\subsection{Call en fonction du log--strike}
+
+\begin{align}
+C(k)
+&= e^{-rT}\,\E\!\left[(e^{Y}-e^{k})^+\right] \nonumber\\
+&= e^{-rT}\int_{\R}(e^{y}-e^{k})^+ f_Y(y)\,\dd y \nonumber\\
+&= e^{-rT}\int_{k}^{+\infty} \big(e^{y}-e^{k}\big)\, f_Y(y)\,\dd y .
+\label{eq:C-of-k}
+\end{align}
+
+\subsection{D\'efinition de la transform\'ee amortie}
+
+Fixons un param\`etre d'amortissement $\alpha>0$. Pour chaque $\nu\in\R$ :
+\begin{equation}\label{eq:psi-def}
+\FT_T(\nu) \equiv \int_{\R} e^{i\nu k}\, e^{\alpha k}\, C(k)\,\dd k , \qquad
+A \equiv \alpha+i\nu .
+\end{equation}
+
+On part de l'expression :
+\begin{equation}
+\psi_T(\nu)
+= e^{-rT}\int_{-\infty}^{+\infty} e^{i\nu k}e^{\alpha k}
+\left[\int_k^{+\infty}(e^{y}-e^{k})f_{S_T}(y)\,\dd y\right] \dd k .
+\tag{1.13}
+\end{equation}
+
+\subsection*{2. Ajout d'une indicatrice}
+
+On peut écrire l'intégrale interne sous forme intégrale sur $\R$ :
+\[
+\int_k^{+\infty}(e^{y}-e^{k})f(y)\,\dd y
+= \int_{-\infty}^{+\infty}(e^{y}-e^{k})\,\1_{\{y\ge k\}}\,f(y)\,\dd y .
+\]
+Ainsi :
+\[
+\psi_T(\nu)
+= e^{-rT}\int_{-\infty}^{+\infty}\int_{-\infty}^{+\infty}
+e^{i\nu k}e^{\alpha k}(e^{y}-e^{k})\,\1_{\{y\ge k\}}\,f(y)\,\dd y\,\dd k .
+\]
+
+\subsection*{3. Domaine d'intégration}
+
+La fonction indicatrice $\1_{\{y\ge k\}}$ définit le domaine :
+\[
+D = \{(k,y)\in\R^2:\ y\ge k\}.
+\]
+On peut paramétrer ce domaine de deux manières équivalentes :
+\[
+\begin{cases}
+k\in(-\infty,+\infty), & y\in[k,+\infty),\\[4pt]
+y\in(-\infty,+\infty), & k\in(-\infty,y].
+\end{cases}
+\]
+C’est exactement la justification des bornes :
+\[
+k\in(-\infty,+\infty),\ y\in(k,+\infty)
+\quad\Longleftrightarrow\quad
+y\in(-\infty,+\infty),\ k\in(-\infty,y) .
+\]
+
+\subsection*{4. Conditions de permutation des intégrales}
+
+On souhaite permuter les intégrales via Fubini--Tonelli. On vérifie :
+\[
+\iint_{D}\!\big|e^{i\nu k}e^{\alpha k}(e^{y}-e^{k})\big|\,f(y)\,\dd y\,\dd k
+\le \iint_{D}\!\big(e^{y}e^{\alpha k}+e^{(\alpha+1)k}\big)\,f(y)\,\dd y\,\dd k .
+\]
+En intégrant en $k$ sur $(-\infty,y]$ :
+\[
+\int_{-\infty}^{y} e^{\alpha k}\,\dd k = \frac{e^{\alpha y}}{\alpha},
+\qquad
+\int_{-\infty}^{y} e^{(\alpha+1)k}\,\dd k = \frac{e^{(\alpha+1)y}}{\alpha+1}.
+\]
+On obtient alors :
+\[
+\iint_D |\cdot| \le 
+\left(\frac{1}{\alpha}+\frac{1}{\alpha+1}\right)
+\E\!\left[e^{(\alpha+1)Y}\right] ,
+\]
+qui est finie si $\alpha>0$ et $\E[e^{(\alpha+1)Y}]<\infty$. La permutation est justifiée.
+
+\subsection*{5. Inversion de l’ordre d’intégration}
+
+On échange les intégrales : $y$ extérieur, $k$ intérieur sur $(-\infty,y)$ :
+\begin{equation}
+\psi_T(\nu)
+= e^{-rT}\int_{-\infty}^{+\infty}
+\left[\int_{-\infty}^{y} e^{i\nu k}e^{\alpha k}(e^{y}-e^{k})\,\dd k\right]
+f_{S_T}(y)\,\dd y .
+\tag{1.14}
+\end{equation}
+
+\subsection*{6. Intégration sur $k$}
+
+En intégrant d'abord en $k$ avec la borne sup\'erieure $y$ :
+\begin{align}
+\FT_T(\nu)
+&= e^{-rT}\int_{\R}\left(\int_{-\infty}^{y} \big(e^{y} e^{Ak}- e^{(A+1)k}\big)\,\dd k\right) f_Y(y)\,\dd y .
+\label{eq:psi-after-swap}
+\end{align}
+\paragraph{Premier terme.}
+\[
+\int_{-\infty}^{y} e^{y} e^{Ak}\,\dd k
+= e^{y}\left[\frac{e^{Ak}}{A}\right]_{k=-\infty}^{k=y}
+= \frac{e^{(A+1)y}}{A}.
+\]
+\paragraph{Second terme.}
+\[
+\int_{-\infty}^{y} e^{(A+1)k}\,\dd k
+= \left[\frac{e^{(A+1)k}}{A+1}\right]_{k=-\infty}^{k=y}
+= \frac{e^{(A+1)y}}{A+1}.
+\]
+En reportant :
+\begin{align}
+\FT_T(\nu)
+&= e^{-rT}\int_{\R}\left(\frac{e^{(A+1)y}}{A}-\frac{e^{(A+1)y}}{A+1}\right) f_Y(y)\,\dd y \nonumber\\
+&= \frac{e^{-rT}}{A(A+1)}\int_{\R} e^{(A+1)y} f_Y(y)\,\dd y .
+\label{eq:psi-pre-phi}
+\end{align}
+
+\subsection{Identification avec la fonction caract\'eristique}
+
+Comme $e^{(A+1)y}=e^{(\alpha+i\nu+1)y}=e^{i(\nu-i(\alpha+1))y}$ :
+\begin{equation}\label{eq:phiY-shift}
+\int_{\R} e^{(A+1)y} f_Y(y)\,\dd y=\CF_Y\!\big(\nu-i(\alpha+1)\big).
+\end{equation}
+Donc, avec \eqref{eq:psi-pre-phi} :
+\begin{equation}\label{eq:psi-phiY}
+\FT_T(\nu)=\frac{e^{-rT}}{A(A+1)}\,\CF_Y\!\big(\nu-i(\alpha+1)\big).
+\end{equation}
+Puis, via \eqref{eq:phiY-phiT-link} :
+\begin{equation}\label{eq:psi-final-CM}
+\boxed{\;
+\psi_T(\nu)=
+\frac{e^{-rT}}{(\alpha+i\nu)(\alpha+i\nu+1)}\,
+\CF_T\!\big(\nu-i(\alpha+1)\big)\,
+S_0^{\,i\nu+\alpha+1}
+\;}
+\end{equation}
+
+\newpage
+
+% =========================================================
+\section{Partie III --- Fonction caract\'eristique du mod\`ele de Heston}
+% =========================================================
+
+\begin{idee}
+On applique Feynman--Kac avec un ansatz affine ; on déduit un système d'EDO de type Riccati qui se résout explicitement.
+\end{idee}
+
+\subsection{Dynamique et variable log}
+
+\[
+\begin{cases}
+\dd S_t = \mu S_t \, \dd t + \sqrt{v_t}\, S_t \, \dd W_t^{(1)}, \\[3pt]
+\dd v_t = \kappa(\theta - v_t)\, \dd t + \sigma \sqrt{v_t} \, \dd W_t^{(2)}, \\[3pt]
+\dd W_t^{(1)}\,\dd W_t^{(2)} = \rho \, \dd t .
+\end{cases}
+\]
+Posons $X_t=\ln S_t$. Alors :
+\[
+\dd X_t = \Big(\mu - \tfrac{1}{2}v_t\Big)\dd t + \sqrt{v_t}\,\dd W_t^{(1)}.
+\]
+La fonction caract\'eristique cherch\'ee est :
+\[
+\CF_T(u)=\E\!\left[e^{iu(X_T-X_0)}\right]=\E\!\left[e^{iu\ln(S_T/S_0)}\right].
+\]
+
+\subsection{Feynman--Kac et ansatz affine}
+
+D\'efinissons :
+\[
+f(u,t,x,v)=\E\!\left[e^{iu X_T}\mid X_t=x,\ v_t=v\right],\qquad f(u,T,x,v)=e^{iux}.
+\]
+
+\subsection{\'Equation backward (Kolmogorov/Feynman--Kac)}
+
+\[
+\partial_t f + \left(\mu - \frac{v}{2}\right) \partial_x f 
++ \kappa(\theta - v)\partial_v f 
++ \frac{1}{2} v \, \partial_{xx} f
++ \rho \sigma v^{1/2} \partial_{xv} f
++ \frac{1}{2}\sigma^2 v \, \partial_{vv} f = 0.
+\]
+On cherche une solution affine :
+\[
+f(u,t,x,v) = \exp\!\big(C(\tau) + D(\tau)v + iux\big), \qquad \tau = T - t .
+\]
+Alors :
+\[
+\partial_t f = -C'(\tau)f - D'(\tau) v f,\quad 
+\partial_x f = i u f,\quad 
+\partial_{xx} f = -u^2 f,\quad
+\partial_v f = D f,\quad
+\partial_{vv} f = D^2 f,\quad
+\partial_{xv} f = i u D f.
+\]
+En substituant :
+\[
+[-C' - D'v] + 
+\left(\mu - \frac{v}{2}\right)(iu)
++ \kappa(\theta - v)D
++ \frac{1}{2}v(-u^2)
++ \rho \sigma v(iuD)
++ \frac{1}{2}\sigma^2 v D^2 = 0.
+\]
+
+\subsection{Identification des termes}
+
+Terme constant :
+\[
+-C' + iu\mu + \kappa\theta D = 0 
+\quad \Rightarrow \quad 
+\boxed{\,C'(\tau) = \kappa\theta D(\tau) + i u \mu\, .}
+\]
+Coefficient de $v$ :
+\[
+-D' - \kappa D - \frac{1}{2}(iu + u^2)
++ \rho \sigma i u D
++ \frac{1}{2}\sigma^2 D^2 = 0,
+\]
+d'o\`u
+\begin{equation}\label{eq:riccati}
+\boxed{\,D'(\tau) = \tfrac{1}{2}\sigma^2 D(\tau)^2 + (\rho\sigma i u - \kappa)D(\tau) + \tfrac{1}{2}(u^2 + iu)\, ,}
+\end{equation}
+avec conditions initiales $C(0)=0$, $D(0)=0$.
+
+\subsection*{3. Explicit Solution of the Riccati Equation for $D(\tau)$}
+
+\subsubsection*{3.1 Stationary Roots}
+Consider the stationary quadratic equation:
+\[
+\tfrac12\sigma^2 z^2 + (\rho\sigma iu - \kappa)z + \tfrac12(u^2+iu)=0.
+\]
+Its roots are:
+\[
+z_{1,2}=\frac{b\pm d}{\sigma^2},\qquad b=\kappa-\rho\sigma iu,\quad d=\sqrt{\,b^2+\sigma^2(u^2+iu)\,}.
+\]
+
+\subsubsection*{3.2 Factorization and Separation of Variables}
+Equation \eqref{eq:riccati} can be rewritten as:
+\[
+D'(\tau)=\frac{\sigma^2}{2}\,\big(D(\tau)-z_1\big)\big(D(\tau)-z_2\big).
+\]
+Separating variables:
+\[
+\frac{dD}{(D-z_1)(D-z_2)}=\frac{\sigma^2}{2}\,d\tau
+=\frac{1}{z_1-z_2}\!\left(\frac{1}{D-z_1}-\frac{1}{D-z_2}\right)d\tau,
+\]
+where \(z_1-z_2=\dfrac{2d}{\sigma^2}\). Integration gives:
+\[
+\frac{1}{z_1-z_2}\Big[\ln|D-z_1|-\ln|D-z_2|\Big]=\frac{\sigma^2}{2}\tau+C
+\ \Longrightarrow\
+\ln\!\frac{D-z_1}{D-z_2}=d\,\tau+C'.
+\]
+Exponentiating:
+\[
+\frac{D(\tau)-z_1}{D(\tau)-z_2}=C_0\,e^{d\tau}.
+\]
+
+\subsubsection*{3.3 Initial Condition and Closed Form}
+From \(D(0)=0\):
+\[
+C_0=\frac{z_1}{z_2}=\frac{b+d}{b-d}=\frac{1}{g},\qquad g:=\frac{b-d}{b+d}.
+\]
+Hence:
+\[
+\frac{D(\tau)-z_1}{D(\tau)-z_2}=\frac{1}{g}e^{d\tau}
+\ \Longrightarrow\
+D(\tau)=\frac{z_2 - z_1\,g\,e^{-d\tau}}{1-g\,e^{-d\tau}}.
+\]
+Substituting \(z_1=(b+d)/\sigma^2\), \(z_2=(b-d)/\sigma^2\), yields the compact form:
+\[
+\boxed{\
+D(\tau)=\frac{b-d}{\sigma^2}\,\frac{1-e^{-d\tau}}{1-g\,e^{-d\tau}},\qquad
+g=\frac{b-d}{b+d}.\
+}
+\]
+
+\subsection{Computation of \(C(\tau)\)}
+
+From \eqref{eq:Cprime}:
+\[
+C(\tau)=iu\,r\,\tau+\kappa\theta\int_0^\tau D(s)\,\dd s.
+\]
+With \(D(s)=\dfrac{b-d}{\sigma^2}\dfrac{1-e^{-ds}}{1-ge^{-ds}}\), define:
+\[
+I(\tau):=\int_0^\tau D(s)\,\dd s
+=\frac{b-d}{\sigma^2}\int_0^\tau \frac{1-e^{-ds}}{1-ge^{-ds}}\,\dd s.
+\]
+\subsubsection*{4.1 Integration by Change of Variable}
+Let \(y=e^{-ds}\), then \(ds=-(1/d)\,dy/y\), \(s=0\mapsto y=1\), \(s=\tau\mapsto y=e^{-d\tau}\):
+\[
+\int_0^\tau \frac{1-e^{-ds}}{1-ge^{-ds}}\,\dd s
+=\frac{1}{d}\int_{e^{-d\tau}}^{1}\frac{1-y}{y(1-gy)}\,\dd y.
+\]
+Partial fraction decomposition:
+\[
+\frac{1-y}{y(1-gy)}=\frac{1}{y}+\frac{g-1}{1-gy}.
+\]
+Integration yields:
+\[
+\int\frac{1}{y}\,\dd y=\ln y,\qquad
+\int\frac{g-1}{1-gy}\,\dd y=-\frac{g-1}{g}\ln(1-gy).
+\]
+Thus:
+\[
+\int_0^\tau \frac{1-e^{-ds}}{1-ge^{-ds}}\,\dd s
+=\tau-\frac{1-g}{g\,d}\ln\!\left(\frac{1-ge^{-d\tau}}{1-g}\right).
+\]
+\subsubsection*{4.2 Simplified Form}
+Since \(\dfrac{1-g}{g}=\dfrac{2d}{b-d}\), we obtain:
+\[
+I(\tau)=\frac{1}{\sigma^2}\Big[(b-d)\tau-2\ln\!\Big(\frac{1-ge^{-d\tau}}{1-g}\Big)\Big].
+\]
+Finally:
+\[
+\boxed{\
+C(\tau)=iu\,r\,\tau+\frac{\kappa\theta}{\sigma^2}\Big[(b-d)\tau-2\ln\!\Big(\frac{1-ge^{-d\tau}}{1-g}\Big)\Big].\
+}
+\]
+
+\[
+\phi_T(u,T,s,v) = \exp\!\big(C(T) + D(T)v + ius\big).
+\]
+
+For \(s=\ln S_0\) and \(v_0=v_t\):
+\[
+\boxed{\
+\phi_T(u)=\exp\!\Big(
+iu(s+rT)
++\frac{v_0}{\sigma^2}(b-d)\frac{1-e^{-dT}}{1-ge^{-dT}}
++\frac{\kappa\theta}{\sigma^2}\Big[(b-d)T-2\ln\!\frac{1-ge^{-dT}}{1-g}\Big]
+\Big),\
+}
+\]
+with:
+\[
+b=\kappa-\rho\sigma iu,\qquad
+d=\sqrt{\,b^2+\sigma^2(u^2+iu)\,},\qquad
+g=\frac{b-d}{b+d}.
+\]
+
+\newpage
+
+% =========================================================
+\section{Partie IV --- Implémentation }
+% =========================================================
+
+\subsection{FFT : pseudo-code complet et commenté}
+Cette section fournit une version algorithmique complète et structurée de la méthode de Carr--Madan appliquée au modèle de Heston. Elle peut être traduite directement en Python, C++ ou MATLAB. Les étapes suivent la logique du schéma analytique développé dans les parties précédentes : définition de la fonction caractéristique, amortissement, discrétisation, transformée inverse et désamortissement.
+
+\begin{tcolorbox}[title=Commentaires pédagogiques,colback=gray!5,colframe=black!70!black]
+\begin{enumerate}
+\item \textbf{Construction des grilles.} La FFT impose la relation de Nyquist $\Delta k\,\Delta v=2\pi/N$. $N$ doit être une puissance de 2.
+\item \textbf{Intégration de Fourier.} Les poids de Simpson réduisent les erreurs d’oscillation et de troncature.
+\item \textbf{Décalage complexe.} L’amortissement $\alpha$ rend la transformée intégrable et stabilise numériquement le calcul.
+\item \textbf{Fonction caractéristique.} L’évaluation de $\phi_T(u)$ repose sur la solution analytique de Heston via $(b,d,g)$.
+\item \textbf{Twist spectral.} Le facteur $e^{-iv_jk_{\min}}$ centre les strikes sur la fenêtre de l’IFFT.
+\item \textbf{IFFT et mise à l’échelle.} L’IFFT ramène en log-strike ; appliquer le facteur $\Delta v/\pi$.
+\item \textbf{Désamortissement.} Le prix du call non amorti s’obtient via $C(K_m)=e^{-\alpha k_m}c_\alpha(k_m)$.
+\item \textbf{Validation.} Vérifier convexité, parité put–call, cas limites Black--Scholes.
+\end{enumerate}
+\end{tcolorbox}
+
+\noindent\textbf{Paramètres conseillés :}
+\[
+N=2^{12},\quad \alpha=1.5,\quad \Delta v=0.25,\quad k_{\min}=\ln S_0 - \frac{\pi}{\Delta v}.
+\]
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetAlgoLined
+\SetKwInOut{Input}{Entrées}
+\SetKwInOut{Output}{Sorties}
+
+\Input{$S_0, r, q, T, (\kappa,\theta,\sigma,\rho,v_0), \alpha, N=2^p, \Delta v, k_{\min}$}
+\Output{$\{K_m, C(K_m)\}_{m=1..N}$}
+
+\BlankLine
+$\Delta k \leftarrow \dfrac{2\pi}{N\,\Delta v}$\;
+\For{$j\leftarrow 0$ \KwTo $N-1$}{$v_j \leftarrow j\,\Delta v$}
+\For{$m\leftarrow 1$ \KwTo $N$}{$k_m \leftarrow k_{\min} + (m-1)\,\Delta k$}
+
+\BlankLine
+\tcc{Poids de Simpson}
+\For{$j\leftarrow 0$ \KwTo $N-1$}{
+    \eIf{$j=0$ ou $j=N-1$}{$w_j\leftarrow 1/3$}{
+        \eIf{$j$ impair}{$w_j\leftarrow 4/3$}{$w_j\leftarrow 2/3$}
+    }
+}
+
+\BlankLine
+$\mathrm{disc}\leftarrow e^{-rT}$\;
+$\ell\leftarrow \ln S_0 + (r-q)T$\;
+
+\BlankLine
+\For{$j\leftarrow 0$ \KwTo $N-1$}{
+    $u \leftarrow v_j - i(\alpha+1)$\;
+    $b \leftarrow \kappa - \rho\sigma i u$\;
+    $d \leftarrow \sqrt{b^2 + \sigma^2(u^2 + i u)}$\; % branche avec Re(d)>0
+    $g \leftarrow (b-d)/(b+d)$\;
+    $\phi_j \leftarrow \exp\!\Big(iu\ell + \frac{v_0}{\sigma^2}(b-d)\frac{1-e^{-dT}}{1-ge^{-dT}} + \frac{\kappa\theta}{\sigma^2}\big[(b-d)T - 2\ln\frac{1-ge^{-dT}}{1-g}\big]\Big)$\;
+    $\psi_j \leftarrow \dfrac{\mathrm{disc}\cdot \phi_j}{(\alpha+i v_j)(\alpha+i v_j+1)}$\;
+    $G_j \leftarrow \psi_j\, e^{-i v_j k_{\min}}\, w_j$\;
+}
+
+\BlankLine
+$\tilde{c}_\alpha \leftarrow \mathrm{IFFT}(G_0,\dots,G_{N-1})$\;
+\For{$m\leftarrow 1$ \KwTo $N$}{
+    $c_\alpha(k_m)\leftarrow \dfrac{\Delta v}{\pi}\,\Re(\tilde{c}_\alpha(m))$\;
+    $C(K_m)\leftarrow e^{-\alpha k_m}\,c_\alpha(k_m)$\;
+    $K_m\leftarrow e^{k_m}$\;
+}
+
+\caption{Carr--Madan FFT pour le modèle de Heston}
+\end{algorithm}
+
+\end{document}
